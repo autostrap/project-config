@@ -22,7 +22,7 @@ Example: `./graphite/10-syseleven.yaml`
 For more information see 
 https://github.com/syseleven/puppet-repodeploy/blob/master/manifests/init.pp
 
-*Note: This directory is an override for sys11-config. Hence only configuration
-parameters with values differing from those in sys11-config need to (and
+*Note: This directory is an override for global-config. Hence only configuration
+parameters with values differing from those in global-config need to (and
 should) be included here. Anything not set explicitely will inherit the default
-values from sys11-config.*
+values from global-config.*

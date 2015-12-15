@@ -14,7 +14,7 @@ returned by the ::nodetype fact.
 At minimum node type configuration files must contain a classes array
 containing the classes to be deployed on nodes with the node type in question.
 config.d and repos.d configuration for these classes must either be pulled in
-from sys11-config by adding the relevant topics to puppet/sys11-topics (see
+from global-config by adding the relevant topics to puppet/topics (see
 above) or by adding it to puppet/hieradata/repos.d and puppet/hieradata/config.d
 in full (the latter is not recommended). Apart from a classes array, node type
 configuration may contain any configuration parameters meant exclusively for

@@ -2,13 +2,13 @@
 #
 # 2015, j.grassler@syseleven.de
 # 
-# Invocation example: heat stack-create -f sensu-masterless.yaml -P key_name=mykey -P deploy_key="$(cat ~/.ssh/deploykey)" -P config_repo="git@gitlab.syseleven.de:cloudstrap/project-config.git" sensu-masterless
+# Invocation example: heat stack-create -f sensu-master-agent.yaml -P key_name=mykey -P deploy_key="$(cat ~/.ssh/deploykey)" -P config_repo="git@gitlab.syseleven.de:cloudstrap/project-config.git" sensu-master-agent
 # Use client specific git repository
-heat_template_version: 2015-04-30
+heat_template_version: 2014-10-16
 
 description: >
-  This template deploys a sensu server with a masterless puppet setup, set up
-  by Syseleven's Cloudstrap bootstrapping system.
+  This template deploys two VMs (puppetmaster and nginx-server) set up by the
+  Autostrap bootstrapping system.
   
 parameters:
   key_name:
@@ -16,7 +16,7 @@ parameters:
     description: Name of keypair to assign to servers
   image:
     type: string
-    default: Ubuntu 14.04 sys11-cloudimg amd64
+    default: Ubuntu-14.04-LTS from cloud-images.ubuntu.com
     description: Name of image to use for servers
   flavor:
     type: string
@@ -27,7 +27,7 @@ parameters:
     default: dc4d2dfb-f8d2-461c-9f16-636edbf99a0f
     description: ID of public network for which floating IP addresses will be allocated
 
-  # Parameters for sys11::cloudstrap
+  # Parameters for AS::cloudstrap
 
   deploy_key:
     type: string
@@ -39,9 +39,12 @@ parameters:
     description: Top-level overrides for Hiera configuration.
     default: ''
 
+
+  ## Repository parameters
+
   config_repo:
     description: Git repository containing project specific cloud configuration
-    default: https://github.com/syseleven/project-config.git
+    default: https://github.com/autostrap/project-config.git
     type: string
 
   config_branch:
@@ -54,15 +57,15 @@ resources:
   ### Creates a Neutron network and subnet
 
   network:
-    type: sys11::network::v3
+    type: AS::network
     properties:
-      router: { get_resource: router}
+      router: { get_resource: router }
       name:
         list_join:
           - '_'
           - [ heat, { get_param: 'OS::stack_name' } ]
 
-
+  
   # Creates a Neutron router for floating IPs and/or SNAT.
 
   router:
@@ -76,7 +79,7 @@ resources:
         network: { get_param: public_net_id }
 
 
-  ### Security group for SSH access from outside 
+  ### Security group for SSH access from outside
   #   (Add your own rule for allowing access to Uchiwa from outside or tunnel it
   #    through SSH).
 
@@ -87,41 +90,86 @@ resources:
       name: allow ssh from anywhere
       rules: 
         - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 22, port_range_max: 22 }
-  
-  ### Generates a user-data script that runs the Syseleven bootstrapping scripts
+ 
+  allow_http:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: "Allow inbound HTTP traffic"
+      name: allow ssh from anywhere
+      rules: 
+        - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 80, port_range_max: 80 }
+ 
+  ### Generates a user-data script that runs the Autostrap bootstrapping scripts
 
   bootstrap:
-    type: sys11::cloudstrap::v5
+    type: AS::autostrap
     properties:
       config_repo: { get_param: config_repo }
       config_branch: { get_param: config_branch }
       deploy_key: { get_param: deploy_key }
       override_yaml: { get_param: override_yaml }
 
+
   ### Sensu server
 
-  sensu-server:
+  puppetmaster:
     type: OS::Nova::Server
     properties:
-      name: sensu-server
+      name: puppetmaster
       config_drive: true
       flavor: { get_param: flavor }
       image: { get_param: image }
       key_name: { get_param: key_name }
       networks:
-        - port: { get_attr: [ sensu-server_port, port ] }
+        - port: { get_attr: [ puppetmaster_port, port ] }
       metadata:
         stack_name: { get_param: 'OS::stack_name' }
-        floating_ip: { get_attr: [ sensu-server_port, floating_ip_address ] }
-        sys11_topics: "base firewall ssh sensu-server puppet-masterless"
+        floating_ip: { get_attr: [ puppetmaster_port, floating_ip_address ] }
+        topics: "base puppet-master puppet-agent ssh"
+        puppet_master: puppetmaster.local
         project_classes: true
       user_data: { get_attr: [ bootstrap, script ] }
       user_data_format: RAW
 
-  sensu-server_port:
-    type: sys11::floatport::v3
+  puppetmaster_port:
+    type: AS::floatport
     properties:
       public_net: { get_param: public_net_id }
       internal_net: { get_resource: network }
-      security_groups:
+      security_groups: 
         - { get_resource: allow_ssh }
+
+
+  nginx-server:
+    type: OS::Nova::Server
+    properties:
+      name: nginx-server
+      config_drive: true
+      flavor: { get_param: flavor }
+      image: { get_param: image }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_attr: [ nginx-server_port, port ] }
+      metadata:
+        stack_name: { get_param: 'OS::stack_name' }
+        floating_ip: { get_attr: [ nginx-server_port, floating_ip_address ] }
+        puppet_master: puppetmaster.local
+        topics: "base puppet-agent ssh"
+      user_data: { get_attr: [ bootstrap, script ] }
+      user_data_format: RAW
+
+  nginx-server_port:
+    type: AS::floatport
+    properties:
+      public_net: { get_param: public_net_id }
+      internal_net: { get_resource: network }
+      security_groups: 
+        - { get_resource: allow_ssh }
+        - { get_resource: allow_http }
+
+
+outputs:
+  puppetmaster_floating_ip: 
+    value: { get_attr: [ puppetmaster_port, floating_ip_address ] }
+  nginx-server_floating_ip: 
+    value: { get_attr: [ nginx-server_port, floating_ip_address ] }

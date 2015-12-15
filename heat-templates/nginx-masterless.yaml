@@ -1,0 +1,136 @@
+# HOT template
+#
+# 2015, j.grassler@syseleven.de
+# 
+# Invocation example: heat stack-create -f nginx-static.yaml -P key_name=mykey -P deploy_key="$(cat ~/.ssh/deploykey)" nginx-static
+heat_template_version: 2015-04-30
+
+description: >
+  This template uses Autostrap to deploy a nginx web server for static content
+  with a masterless puppet setup.
+  
+parameters:
+  key_name:
+    type: string
+    description: Name of keypair to assign to servers
+  image:
+    type: string
+    default: Ubuntu-14.04-LTS from cloud-images.ubuntu.com
+    description: Name of image to use for servers
+  flavor:
+    type: string
+    default: m1.tiny
+    description: Flavor to use for nodes
+  public_net_id:
+    type: string
+    default: dc4d2dfb-f8d2-461c-9f16-636edbf99a0f
+    description: ID of public network for which floating IP addresses will be allocated
+
+  # Parameters for autostrap resource
+
+  deploy_key:
+    type: string
+    description: SSH private key required to access repositories
+    hidden: true
+
+  override_yaml:
+    type: string
+    description: Top-level overrides for Hiera configuration.
+    default: ''
+
+  config_repo:
+    description: Git repository containing project specific cloud configuration
+    default: https://github.com/autostrap/project-config.git
+    type: string
+
+  config_branch:
+    description: Git branch to use in project specific config repository
+    default: master
+    type: string
+
+resources:
+
+  ### Creates a Neutron network and subnet
+
+  network:
+    type: AS::network
+    properties:
+      router: { get_resource: router}
+      name:
+        list_join:
+          - '_'
+          - [ heat, { get_param: 'OS::stack_name' } ]
+
+
+  # Creates a Neutron router for floating IPs and/or SNAT.
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      name:
+        list_join:
+          - '_'
+          - [ 'router', 'heat', { get_param: 'OS::stack_name' } ]
+      external_gateway_info:
+        network: { get_param: public_net_id }
+
+
+  ### Security group for SSH access from outside 
+  #   (Add your own rule for allowing access to Uchiwa from outside or tunnel it
+  #    through SSH).
+
+  allow_ssh:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: "Allow inbound SSH traffic"
+      name: allow ssh from anywhere
+      rules: 
+        - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 22, port_range_max: 22 }
+
+  allow_http:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: "Allow inbound SSH traffic"
+      name: allow ssh from anywhere
+      rules: 
+        - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 80, port_range_max: 80 }
+  
+  
+  ### Generates a user-data script that runs the Autostrap bootstrapping scripts
+
+  bootstrap:
+    type: AS::autostrap
+    properties:
+      config_repo: { get_param: config_repo }
+      config_branch: { get_param: config_branch }
+      deploy_key: { get_param: deploy_key }
+      override_yaml: { get_param: override_yaml }
+
+  ### Web server
+
+  nginx-server:
+    type: OS::Nova::Server
+    properties:
+      name: nginx-server
+      config_drive: true
+      flavor: { get_param: flavor }
+      image: { get_param: image }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_attr: [ nginx-server_port, port ] }
+      metadata:
+        stack_name: { get_param: 'OS::stack_name' }
+        floating_ip: { get_attr: [ nginx-server_port, floating_ip_address ] }
+        topics: "base  puppet-masterless ssh"
+        project_classes: true
+      user_data: { get_attr: [ bootstrap, script ] }
+      user_data_format: RAW
+
+  nginx-server_port:
+    type: AS::floatport
+    properties:
+      public_net: { get_param: public_net_id }
+      internal_net: { get_resource: network }
+      security_groups:
+        - { get_resource: allow_ssh }
+        - { get_resource: allow_http }

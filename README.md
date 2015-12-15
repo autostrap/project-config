@@ -2,21 +2,21 @@ Description
 ===========
 
 This repository contains project specific configuration for Openstack instances
-deployed using Syseleven's cloudstrap framework.
+deployed using the [autostrap](https://github.com/autostrap) framework.
 
 Structure
 =========
 
-puppet/sys11-topcis contains a list of configuration topics to be pulled in
-from sys11-configs.
+puppet/topcis contains a list of configuration topics to be pulled in
+from global-configs.
 
 The remaining configuration resides in the puppet/hieradata subdirectory. This
 directory contains four *type directories*, grouping configuration by
 configuration type: nodes.d, nodetype.d, config.d and repos.d.
 
-config.d and repos.d contain *topic directories* (e.g. sensu-server/ for
-deploying a sensu server or ssh/ for rolling out SSH keys and configuring the
-SSH server). For any given topic there may be a topic subdirectories in any of
+config.d and repos.d contain *topic directories* (e.g. `nginx-static/` for
+deploying a web server or ssh/ for rolling out SSH keys and configuring the SSH
+server). For any given topic there may be a topic subdirectories in any of
 config.d and repos.d. Both of these directories' contents override
 configuration from their counterparts in the sys11-config repository.
 
@@ -38,21 +38,21 @@ For numbering your own scripts there are two rules:
 * Numbers must be written in three-digit format (e.g. '015' instead of '15')
 
 * Multiples of 20, including '000' (e.g. '000', '020', '040') are reserved for
-  Syseleven's use. Apart from that anything goes (just pick a number that will
-  insert your own script between the desired Syseleven scripts.
+  Autostrap's use. Apart from that anything goes (just pick a number that will
+  insert your own script between the desired Autostrap scripts.
 
 Scripts in bootstrap.d may expect the following environment variables to be present:
 
 * ``config_dir``          The directory this repository has been checked out to.
-* ``scripts_dir``         The directory the Syseleven provided bootstrap-scripts repository has been checked out to.
-* ``sys11_config_dir``    The directory Syseleven provided default configuration has been checked out to.
+* ``scripts_dir``         The directory Autostrap's bootstrap-scripts repository has been checked out to.
+* ``global_config_dir``   The directory Autostrap default configuration(global-config) has been checked out to.
 * ``scripts_branch``      The branch used for the bootstrap-scripts directory.
 * ``config_repo``         The URL pointing to this repository.
 * ``config_branch``       The branch used for this repository.
-* ``repodeploy_repo``     The URL pointing to Syseleven's puppet-repodeploy repository.
+* ``repodeploy_repo``     The URL pointing to the puppet-repodeploy repository.
 * ``repodeploy_branch``   The branch used for puppet-repodeploy.
-* ``sys11_config_repo``   The URL pointing to Syseleven's default configuration repository (sys11-config).
-* ``sys11_config_branch`` The branch used for Syseleven's default configuration repository.
+* ``sys11_config_repo``   The URL pointing to the Autostrap default configuration repository (global-config).
+* ``sys11_config_branch`` The branch used for the Autostrap default configuration repository.
 
 Additionally, ``${scripts_dir}/bin`` may be expected to be part of the shell's
 PATH.
@@ -61,7 +61,7 @@ puppet/sys11-topics
 -------------------
 
 This file contains contains a list of all configuration topics to be included
-from the sys11-config repository. It may contain comment lines denoted by a
+from the global-config repository. It may contain comment lines denoted by a
 leading '#' and duplicate entries (any duplicate entries are filtered out by
 the hiera.yaml generator). This file must contain all configuration that is
 not fully duplicated in the project repository. A topic's mention in this file
@@ -82,7 +82,7 @@ course).
 
 At minimum node configuration files must contain a classes array containing the
 classes to be deployed on the node in question. config.d and repos.d
-configuration for these classes must either be pulled in from sys11-config
+configuration for these classes must either be pulled in from global-config
 by adding the relevant topics to puppet/sys11-topics (see above) or by adding
 it to puppet/hieradata/repos.d and puppet/hieradata/config.d in full (the
 latter is not recommended). Apart from a classes array, node configuration may
@@ -112,7 +112,7 @@ returned by the ::nodetype fact.
 At minimum node type configuration files must contain a classes array
 containing the classes to be deployed on nodes with the node type in question.
 config.d and repos.d configuration for these classes must either be pulled in
-from sys11-config by adding the relevant topics to puppet/sys11-topics (see
+from global-config by adding the relevant topics to puppet/global-topics (see
 above) or by adding it to puppet/hieradata/repos.d and puppet/hieradata/config.d
 in full (the latter is not recommended). Apart from a classes array, node type
 configuration may contain any configuration parameters meant exclusively for
@@ -133,10 +133,10 @@ puppet-repodeploy configuration. Configuration that is common to multiple
 topics should go into a file named common.yaml in one of the topic directories
 involved that is symlinked from the other topic directories.
 
-*Note: This directory is an override for sys11-config. Hence only configuration
-parameters with values differing from those in sys11-config needs to (and
+*Note: This directory is an override for global-config. Hence only configuration
+parameters with values differing from those in global-config needs to (and
 should) be included here. Anything else not set explicitely will inherit the
-default values from sys11-config.*
+default values from global-config.*
 
 puppet/hieradata/repos.d
 ------------------------
@@ -146,7 +146,7 @@ configuration (i.e. the *repodeploy::repos hash*) specifiying all repositories
 required to configure the topic configuration in question. This directory must
 not contain any other configuration.
 
-*Note: This directory is an override for sys11-config. Hence only configuration
+*Note: This directory is an override for global-config. Hence only configuration
 parameters with values differing from those in sys11-config need to (and
 should) be included here. Anything not set explicitely will inherit the default
 values from sys11-config.*
