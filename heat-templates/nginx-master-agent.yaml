@@ -153,6 +153,7 @@ resources:
       metadata:
         stack_name: { get_param: 'OS::stack_name' }
         floating_ip: { get_attr: [ nginx-server_port, floating_ip_address ] }
+        nodetype: docserver
         puppet_master: puppetmaster.local
         topics: "base puppet-agent ssh"
       user_data: { get_attr: [ bootstrap, script ] }

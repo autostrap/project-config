@@ -1,0 +1,68 @@
+classes:
+  - docbuild
+
+repodeploy::repos:
+  '/opt/puppet-modules/docbuild':
+    provider: git
+    source: https://github.com/autostrap/puppet-docbuild.git
+  '/opt/scripts/cloudstrap-utils':
+    source: https://github.com/autostrap/autostrap-utils.git
+    provider: git
+    post-checkout: |
+      #!/bin/sh
+      repo="<%= @name %>"
+      for i in ${repo}/bin/*
+        do
+          if [ ! -e /usr/local/bin/$(basename $i) ]; then
+            ln -s $i /usr/local/bin
+          fi
+        done
+
+# Default post-checkout script to avoid duplication further down.
+sys11doc::post-checkout: |
+  #!/bin/sh
+  repo="<%= @name %>"
+  wwwroot='/usr/share/nginx/html'
+  destdir="${wwwroot}/$(basename "$repo")"
+  cd $repo
+  make
+  mkdir -p "$destdir"
+  rsync --archive --delete --ignore-missing-args site/ "$destdir"
+
+# Default post-checkout script for generating puppet module documentation.
+sys11doc::post-checkout_puppet: |
+  #!/bin/sh
+  # If $HOME is unset `puppet strings` will fail as follows:
+  #   "Error: The 'yard' gem must be installed in order to use this face."
+  export HOME=/root
+  repo="<%= @name %>"
+  name=$(basename "$repo")
+  wwwroot='/usr/share/nginx/html'
+  destdir="${wwwroot}/puppet/$name"
+  cd $repo
+  puppet strings --modulepath '/opt/puppet-modules'
+  rsync --archive --delete --ignore-missing-args doc/ "${destdir}"
+
+docbuild::repos:
+  '/opt/doc/autostrap':
+    source: https://github.com/autostrap/autostrap-docs.git
+    provider: git
+    ensure: latest
+    post-checkout: "%{hiera('sys11doc::post-checkout')}"
+  '/opt/doc/heat-resources':
+    source: https://github.com/autostrap/heat-resources.git
+    provider: git
+    ensure: latest
+    # ugly but required since `doc` is not part of the heat-resources
+    # repository's `all` target.
+    post-checkout: >
+      #!/bin/sh
+
+      make doc
+
+      %{hiera('sys11doc::post-checkout')}
+  '/opt/doc/puppet/repodeploy':
+    source: https://github.com/autostrap/puppet-repodeploy.git
+    provider: git
+    ensure: latest
+    post-checkout: "%{hiera('sys11doc::post-checkout_puppet')}"

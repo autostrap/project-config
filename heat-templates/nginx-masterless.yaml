@@ -121,8 +121,8 @@ resources:
       metadata:
         stack_name: { get_param: 'OS::stack_name' }
         floating_ip: { get_attr: [ nginx-server_port, floating_ip_address ] }
+        nodetype: docserver
         topics: "base  puppet-masterless ssh"
-        project_classes: true
       user_data: { get_attr: [ bootstrap, script ] }
       user_data_format: RAW
 
