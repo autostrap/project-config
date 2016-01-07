@@ -32,6 +32,7 @@ parameters:
     type: string
     description: SSH private key required to access repositories
     hidden: true
+    default: ''
 
   override_yaml:
     type: string
