@@ -139,6 +139,7 @@ resources:
       internal_net: { get_resource: network }
       security_groups: 
         - { get_resource: allow_ssh }
+        - { get_attr: [ network, security_group ] }  # Allow all connections over internal network
 
 
   nginx-server:
@@ -168,6 +169,8 @@ resources:
       security_groups: 
         - { get_resource: allow_ssh }
         - { get_resource: allow_http }
+        - { get_attr: [ network, security_group ] }  # Allow all connections over internal network
+
 
 
 outputs:
