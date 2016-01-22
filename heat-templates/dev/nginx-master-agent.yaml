@@ -1,8 +1,14 @@
 heat_template_version: 2014-10-16
 
 description: |
-  This template deploys two VMs (puppetmaster and nginx-server) set up by the
-  Autostrap bootstrapping system. Usage example:
+  This template uses Autostrap to deploy a nginx web server for static content, configured
+  by a puppet master also set up by this template. It is mostly identical to
+  nginx-master-agent.yaml in the parent directory, with the sole exception
+  being its parameters: It contains all possible parameters for the
+  AS::autostrap resource and passes them through to this resource. This is
+  mainly for development where you may have to supply non-default values for
+  uncommon parameters that are commonly left alone, such as script_branch.
+  Usage example:
 
   heat stack-create -e ~/.heat/autostrap.yaml \
      -e ~/.heat/myenv.yaml \
@@ -30,31 +36,93 @@ parameters:
     default: dc4d2dfb-f8d2-461c-9f16-636edbf99a0f
     description: ID of public network for which floating IP addresses will be allocated
 
-  # Parameters for AS::cloudstrap
+  # Parameters for autostrap resource
 
-  deploy_key:
-    type: string
-    description: SSH private key required to access repositories
-    hidden: true
+  additional_config:
+    description: |
+      Specifies one or more additional repositories configuration repositories
+      to clone as a space separated string, with the individual tokens
+      formatted as follows:
+
+      `<repository url>[#<revision>]::[[<path>][:<path> ...]]`
+
+      Specifying a revision is optional.
+
+      The paths at the end specify the files to be included in hiera.yaml and are
+      relative to the repository's root directory. You may omit the '.yaml'
+      extension (if it exists it will be stripped for inclusion in hiera.yaml).
+
+      Example: `'https://example.com/my-additional-config.git::ssh/keys.yaml git@gitlab.example.com:my-team/my-config.git::config/ssh/my_keys:bar/:config/apache'`
     default: ''
-
-  override_yaml:
     type: string
-    description: Top-level overrides for Hiera configuration.
+
+  extra_overrides:
+    description: Space delimited list of extra hierarchy entries to insert into hiera.yaml after the `override` entry.
+    type: string
     default: ''
-
-
-  ## Repository parameters
 
   config_repo:
-    description: Git repository containing project specific cloud configuration
+    description: URL of project specific configuration repository (commonly a fork of project-config).
     default: https://github.com/autostrap/project-config.git
     type: string
 
   config_branch:
-    description: Git branch to use in project specific config repository
+    description: Git branch/commit of `config_repo` to use.
     default: master
     type: string
+
+  global_config_repo:
+    description: URL of default configuration repository global-config.
+    default: https://github.com/autostrap/global-config.git
+    type: string
+
+  global_config_branch:
+    description: Git branch/commit of `global_config_repo` to use.
+    default: master
+    type: string
+
+  deploy_key:
+    description: SSH private key required to access repositories
+    default: ''
+    type: string
+    hidden: true
+
+  openstackfacts_repo:
+    description: Repository URL of puppet module puppet-openstackfacts.
+    default: https://github.com/autostrap/puppet-openstackfacts.git
+    type: string
+
+  openstackfacts_branch:
+    description: Git branch/commit of `openstackfacts_repo` to use.
+    default: master
+    type: string
+
+  repodeploy_repo:
+    description: Repository URL of puppet module puppet-repodeploy.
+    default: https://github.com/autostrap/puppet-repodeploy.git
+    type: string
+
+  repodeploy_branch:
+    description: Git branch/commit of `repodeploy_repo` to use.
+    default: master
+    type: string
+
+  override_yaml:
+    description: Content for `override.yaml` (this file is inserted at the top of Hiera's hierarchy array).
+    default: ""
+    type: string
+
+  scripts_repo:
+    description: Repository URL of bootstrap-scripts.
+    default: https://github.com/autostrap/bootstrap-scripts.git
+    type: string
+
+  scripts_branch:
+    description: Git branch/commit of `scripts_repo` to use.
+    default: master
+    type: string
+
+
 
 resources:
 

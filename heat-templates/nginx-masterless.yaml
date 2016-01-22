@@ -1,13 +1,17 @@
-# HOT template
-#
-# 2015, j.grassler@syseleven.de
-# 
-# Invocation example: heat stack-create -f nginx-static.yaml -P key_name=mykey -P deploy_key="$(cat ~/.ssh/deploykey)" nginx-static
 heat_template_version: 2015-04-30
 
-description: >
+description: |
   This template uses Autostrap to deploy a nginx web server for static content
-  with a masterless puppet setup.
+  with a masterless puppet setup. Usage example:
+
+  heat stack-create -e ~/.heat/autostrap.yaml \
+     -e ~/.heat/myenv.yaml \
+     -P key_name=jgrassler \
+     -P public_net_id=float2 \
+     -P flavor=m1.small \
+     -f nginx-masterless.yaml \
+     nginx-masterless
+  
   
 parameters:
   key_name:

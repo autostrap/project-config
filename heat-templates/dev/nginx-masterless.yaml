@@ -1,0 +1,221 @@
+heat_template_version: 2014-10-16
+
+
+description: |
+  This template uses Autostrap to deploy a nginx web server for static content
+  with a masterless puppet setup. It is mostly identical to
+  nginx-masterless.yaml in the parent directory, with the sole exception being
+  its parameters: It contains all possible parameters for the AS::autostrap
+  resource and passes them through to this resource. This is mainly for
+  development where you may have to supply non-default values for uncommon
+  parameters that are commonly left alone, such as script_branch. Usage example:
+
+  heat stack-create -e ~/.heat/autostrap.yaml \
+     -e ~/.heat/myenv.yaml \
+     -P key_name=jgrassler \
+     -P public_net_id=float2 \
+     -P flavor=m1.small \
+     -P scripts_branch=my_feature_branch \
+     -f nginx-masterless.yaml \
+     nginx-masterless
+  
+parameters:
+  key_name:
+    type: string
+    description: Name of keypair to assign to servers
+  image:
+    type: string
+    default: Ubuntu-14.04-LTS from cloud-images.ubuntu.com
+    description: Name of image to use for servers
+  flavor:
+    type: string
+    default: m1.tiny
+    description: Flavor to use for nodes
+  public_net_id:
+    type: string
+    default: dc4d2dfb-f8d2-461c-9f16-636edbf99a0f
+    description: ID of public network for which floating IP addresses will be allocated
+
+  # Parameters for autostrap resource
+
+  additional_config:
+    description: |
+      Specifies one or more additional repositories configuration repositories
+      to clone as a space separated string, with the individual tokens
+      formatted as follows:
+
+      `<repository url>[#<revision>]::[[<path>][:<path> ...]]`
+
+      Specifying a revision is optional.
+
+      The paths at the end specify the files to be included in hiera.yaml and are
+      relative to the repository's root directory. You may omit the '.yaml'
+      extension (if it exists it will be stripped for inclusion in hiera.yaml).
+
+      Example: `'https://example.com/my-additional-config.git::ssh/keys.yaml git@gitlab.example.com:my-team/my-config.git::config/ssh/my_keys:bar/:config/apache'`
+    default: ''
+    type: string
+
+  extra_overrides:
+    description: Space delimited list of extra hierarchy entries to insert into hiera.yaml after the `override` entry.
+    type: string
+    default: ''
+
+  config_repo:
+    description: URL of project specific configuration repository (commonly a fork of project-config).
+    default: https://github.com/autostrap/project-config.git
+    type: string
+
+  config_branch:
+    description: Git branch/commit of `config_repo` to use.
+    default: master
+    type: string
+
+  global_config_repo:
+    description: URL of default configuration repository global-config.
+    default: https://github.com/autostrap/global-config.git
+    type: string
+
+  global_config_branch:
+    description: Git branch/commit of `global_config_repo` to use.
+    default: master
+    type: string
+
+  deploy_key:
+    description: SSH private key required to access repositories
+    default: ''
+    type: string
+    hidden: true
+
+  openstackfacts_repo:
+    description: Repository URL of puppet module puppet-openstackfacts.
+    default: https://github.com/autostrap/puppet-openstackfacts.git
+    type: string
+
+  openstackfacts_branch:
+    description: Git branch/commit of `openstackfacts_repo` to use.
+    default: master
+    type: string
+
+  repodeploy_repo:
+    description: Repository URL of puppet module puppet-repodeploy.
+    default: https://github.com/autostrap/puppet-repodeploy.git
+    type: string
+
+  repodeploy_branch:
+    description: Git branch/commit of `repodeploy_repo` to use.
+    default: master
+    type: string
+
+  override_yaml:
+    description: Content for `override.yaml` (this file is inserted at the top of Hiera's hierarchy array).
+    default: ""
+    type: string
+
+  scripts_repo:
+    description: Repository URL of bootstrap-scripts.
+    default: https://github.com/autostrap/bootstrap-scripts.git
+    type: string
+
+  scripts_branch:
+    description: Git branch/commit of `scripts_repo` to use.
+    default: master
+    type: string
+
+
+resources:
+
+  ### Creates a Neutron network and subnet
+
+  network:
+    type: AS::network
+    properties:
+      router: { get_resource: router}
+      name:
+        list_join:
+          - '_'
+          - [ heat, { get_param: 'OS::stack_name' } ]
+
+
+  # Creates a Neutron router for floating IPs and/or SNAT.
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      name:
+        list_join:
+          - '_'
+          - [ 'router', 'heat', { get_param: 'OS::stack_name' } ]
+      external_gateway_info:
+        network: { get_param: public_net_id }
+
+
+  ### Security group for SSH access from outside 
+  #   (Add your own rule for allowing access to Uchiwa from outside or tunnel it
+  #    through SSH).
+
+  allow_ssh:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: "Allow inbound SSH traffic"
+      name: allow ssh from anywhere
+      rules: 
+        - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 22, port_range_max: 22 }
+
+  allow_http:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: "Allow inbound SSH traffic"
+      name: allow ssh from anywhere
+      rules: 
+        - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 80, port_range_max: 80 }
+  
+  
+  ### Generates a user-data script that runs the Autostrap bootstrapping scripts
+
+  bootstrap:
+    type: AS::autostrap
+    properties:
+      additional_config: { get_param: additional_config }
+      config_repo: { get_param: config_repo }
+      config_branch: { get_param: config_branch }
+      deploy_key: { get_param: deploy_key }
+      extra_overrides: { get_param: extra_overrides }
+      openstackfacts_repo: { get_param: openstackfacts_repo }
+      openstackfacts_branch: { get_param: openstackfacts_branch }
+      override_yaml: { get_param: override_yaml }
+      repodeploy_repo: { get_param: repodeploy_repo }
+      repodeploy_branch: { get_param: repodeploy_branch }
+      scripts_repo: { get_param: scripts_repo }
+      scripts_branch: { get_param: scripts_branch }
+      global_config_repo: { get_param: global_config_repo }
+      global_config_branch: { get_param: global_config_branch }
+
+  ### Web server
+
+  nginx-server:
+    type: OS::Nova::Server
+    properties:
+      name: nginx-server
+      config_drive: true
+      flavor: { get_param: flavor }
+      image: { get_param: image }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_attr: [ nginx-server_port, port ] }
+      metadata:
+        stack_name: { get_param: 'OS::stack_name' }
+        floating_ip: { get_attr: [ nginx-server_port, floating_ip_address ] }
+        nodetype: docserver
+        topics: "base  puppet-masterless ssh"
+      user_data: { get_attr: [ bootstrap, script ] }
+      user_data_format: RAW
+
+  nginx-server_port:
+    type: AS::floatport
+    properties:
+      public_net: { get_param: public_net_id }
+      internal_net: { get_resource: network }
+      security_groups:
+        - { get_resource: allow_ssh }
+        - { get_resource: allow_http }

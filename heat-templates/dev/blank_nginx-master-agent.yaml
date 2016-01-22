@@ -1,64 +1,112 @@
 heat_template_version: 2014-10-16
 
 description: |
-  This template deploys two VMs (puppetmaster and nginx-server) set up by the
-  Autostrap bootstrapping system. Usage example:
+  This template deploys two VMs (puppetmaster and nginx-server) for testing and development of
+  autostrap.standalone. Usage example:
 
   heat stack-create -e ~/.heat/autostrap.yaml \
-     -e ~/.heat/myenv.yaml \
      -P key_name=jgrassler \
      -P public_net_id=float2 \
      -P flavor=m1.small \
-     -P scripts_branch=my_feature_branch \
-     -f nginx-master-agent.yaml \
-     nginx-master-agent
+     -f blank_nginx-master-agent.yaml \
+     blank_nginx-master-agent
+
+  Once your stack is up and running you can kick off the bootstrapping process
+  by running the following command on puppetmaster...
+
+    /root/bootstrap-scripts/stage0/autostrap.standalone \
+       -m topics="base puppet-agent puppet-master"
+
+  ...and the following command on nginx-server:
+
+    /root/bootstrap-scripts/stage0/autostrap.standalone \
+       -m topics="base puppet-agent" \
+       -m nodetype=docserver \
+       -m floating_ip=<IP>
+
+  (substitute the machine's floating IP address for <IP>)
+ 
   
 parameters:
   key_name:
     type: string
     description: Name of keypair to assign to servers
+
   image:
     type: string
     default: Ubuntu-14.04-LTS from cloud-images.ubuntu.com
     description: Name of image to use for servers
+
   flavor:
     type: string
-    default: m1.tiny
+    default: m1.small
     description: Flavor to use for nodes
+
   public_net_id:
     type: string
-    default: dc4d2dfb-f8d2-461c-9f16-636edbf99a0f
     description: ID of public network for which floating IP addresses will be allocated
-
-  # Parameters for AS::cloudstrap
 
   deploy_key:
     type: string
-    description: SSH private key required to access repositories
+    description: SSH private key required to access repositories. Will be written to /root/deploy_key.
     hidden: true
     default: ''
 
   override_yaml:
     type: string
-    description: Top-level overrides for Hiera configuration.
+    description: Top-level overrides for Hiera configuration. Will be written to /root/override.yaml.
     default: ''
 
-
-  ## Repository parameters
-
-  config_repo:
-    description: Git repository containing project specific cloud configuration
-    default: https://github.com/autostrap/project-config.git
+  scripts_branch:
     type: string
-
-  config_branch:
-    description: Git branch to use in project specific config repository
+    description: Branch to use for initial clone of bootstrap-scripts.
     default: master
+
+  scripts_repo:
     type: string
+    description: URL of bootstrap-scripts repository. Will be cloned to /root/bootstrap-scripts.
+    default: https://github.com/autostrap/bootstrap-scripts.git
 
 resources:
 
   ### Creates a Neutron network and subnet
+
+
+  bootstrap:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - type: text
+          config:
+            str_replace:
+              params:
+                $deploy_key: { get_param: deploy_key }
+                $override_yaml: { get_param: override_yaml }
+                $scripts_repo: { get_param: scripts_repo }
+                $scripts_branch: { get_param: scripts_branch }
+              template: |
+                #!/usr/bin/env bash
+                set -x
+
+                export scripts_repo=$scripts_repo
+                export scripts_branch=$scripts_branch
+
+                cat > /root/override.yaml <<'EOF'
+                $override_yaml
+                EOF
+
+                cat > /root/deploy_key <<'EOF'
+                $deploy_key
+                EOF
+
+                umount /config
+
+                cp ~ubuntu/.ssh/authorized_keys /root/.ssh/authorized_keys
+
+                apt-get -y update
+                apt-get -y install git
+
+                git clone --branch $scripts_branch "$scripts_repo" /root/bootstrap-scripts
 
   network:
     type: AS::network
@@ -103,24 +151,14 @@ resources:
       rules: 
         - { direction: ingress, remote_ip_prefix: 0.0.0.0/0, protocol: tcp, port_range_min: 80, port_range_max: 80 }
  
-  ### Generates a user-data script that runs the Autostrap bootstrapping scripts
 
-  bootstrap:
-    type: AS::autostrap
-    properties:
-      config_repo: { get_param: config_repo }
-      config_branch: { get_param: config_branch }
-      deploy_key: { get_param: deploy_key }
-      override_yaml: { get_param: override_yaml }
-
-
-  ### Sensu server
+  ### Puppet Master
 
   puppetmaster:
     type: OS::Nova::Server
     properties:
       name: puppetmaster
-      config_drive: true
+      config_drive: false
       flavor: { get_param: flavor }
       image: { get_param: image }
       key_name: { get_param: key_name }
@@ -132,7 +170,7 @@ resources:
         topics: "base puppet-master puppet-agent ssh"
         puppet_master: puppetmaster.local
         project_classes: true
-      user_data: { get_attr: [ bootstrap, script ] }
+      user_data: { get_resource: bootstrap }
       user_data_format: RAW
 
   puppetmaster_port:
@@ -145,11 +183,13 @@ resources:
         - { get_attr: [ network, security_group ] }  # Allow all connections over internal network
 
 
+  ### Web Server
+
   nginx-server:
     type: OS::Nova::Server
     properties:
       name: nginx-server
-      config_drive: true
+      config_drive: false
       flavor: { get_param: flavor }
       image: { get_param: image }
       key_name: { get_param: key_name }
@@ -161,7 +201,7 @@ resources:
         nodetype: docserver
         puppet_master: puppetmaster.local
         topics: "base puppet-agent ssh"
-      user_data: { get_attr: [ bootstrap, script ] }
+      user_data: { get_resource: bootstrap }
       user_data_format: RAW
 
   nginx-server_port:
@@ -173,7 +213,6 @@ resources:
         - { get_resource: allow_ssh }
         - { get_resource: allow_http }
         - { get_attr: [ network, security_group ] }  # Allow all connections over internal network
-
 
 
 outputs:
