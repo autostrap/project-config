@@ -1,2 +1,0 @@
-sys11sensu::rabbitmq_host: sensu-server.local
-sys11sensu::rabbitmq_password: sensu_rabbitmq_password
