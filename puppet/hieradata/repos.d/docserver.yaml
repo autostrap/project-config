@@ -1,0 +1,16 @@
+repodeploy::repos:
+  '/opt/puppet-modules/docbuild':
+    provider: git
+    source: https://github.com/autostrap/puppet-docbuild.git
+  '/opt/scripts/autostrap-utils':
+    source: https://github.com/autostrap/autostrap-utils.git
+    provider: git
+    post-checkout: |
+      #!/bin/sh
+      repo="<%= @name %>"
+      for i in ${repo}/bin/*
+        do
+          if [ ! -e /usr/local/bin/$(basename $i) ]; then
+            ln -s $i /usr/local/bin
+          fi
+        done
