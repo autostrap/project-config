@@ -20,15 +20,3 @@ for the Puppet master/agent setup.
 `<my_deploy_key>` is your SSH private deployment key, for example ~/.ssh/deploy.key
 `<my_nova_keypair_name>` is the name of the SSH Keypair in nova, for example "mykey"
 `<my_project-config_git_fork>` is the fork of project-config specific to your client, for example "git@gitlab.syseleven.de:mycustomer/project-config.git"
-
-
-If you would like to use Syseleven's
-[scloud](https://github.com/syseleven/python-cloudutils) utility, you can
-instatiate these stacks using the scloud configuration provided along with the
-heat templates:
-
-  `scloud --config-file ~/.scloud.conf --config-file nginx-masterless.conf`
-  `scloud --config-file ~/.scloud.conf --config-file nginx-master-agent.conf`
-
-This assumes you configured sensible defaults for the `key_name` and
-`deploy_key` parameters in ~/.scloud.conf.
